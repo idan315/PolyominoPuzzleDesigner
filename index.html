@@ -1,0 +1,647 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Polyomino Puzzle Designer</title>
+  <style>
+    /* ── Reset & base ───────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: #f0f4f8;
+      color: #1a202c;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 1rem;
+    }
+
+    h1 {
+      font-size: 1.8rem;
+      font-weight: 700;
+      color: #2d3748;
+      margin-bottom: 0.25rem;
+      text-align: center;
+    }
+
+    .subtitle {
+      color: #718096;
+      font-size: 0.9rem;
+      margin-bottom: 1rem;
+      text-align: center;
+    }
+
+    /* ── Layout ─────────────────────────────────────────────────── */
+    .app {
+      display: flex;
+      gap: 1.2rem;
+      align-items: flex-start;
+      flex-wrap: wrap;
+      justify-content: center;
+      width: 100%;
+      max-width: 1100px;
+    }
+
+    /* ── Sidebar ─────────────────────────────────────────────────── */
+    .sidebar {
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 2px 10px rgba(0,0,0,.08);
+      padding: 1rem;
+      width: 220px;
+      flex-shrink: 0;
+    }
+
+    .sidebar h2 {
+      font-size: 0.85rem;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      color: #a0aec0;
+      margin-bottom: 0.6rem;
+    }
+
+    /* ── Piece palette ───────────────────────────────────────────── */
+    .piece-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .piece-btn {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.4rem 0.6rem;
+      border: 2px solid transparent;
+      border-radius: 8px;
+      cursor: pointer;
+      background: #f7fafc;
+      transition: background .15s, border-color .15s;
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: #2d3748;
+    }
+
+    .piece-btn:hover  { background: #ebf4ff; }
+    .piece-btn.active { border-color: #4299e1; background: #ebf4ff; }
+
+    /* mini preview drawn by JS */
+    .piece-preview {
+      display: grid;
+      gap: 1px;
+    }
+    .piece-preview .cell {
+      width: 8px;
+      height: 8px;
+      border-radius: 1px;
+    }
+
+    /* ── Color picker ────────────────────────────────────────────── */
+    .color-swatches {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 0.4rem;
+    }
+
+    .swatch {
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      cursor: pointer;
+      border: 3px solid transparent;
+      transition: transform .15s, border-color .15s;
+    }
+
+    .swatch:hover    { transform: scale(1.15); }
+    .swatch.active   { border-color: #1a202c; }
+
+    /* ── Controls ────────────────────────────────────────────────── */
+    .controls {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      margin-top: 0.5rem;
+    }
+
+    .control-row {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.82rem;
+    }
+
+    .control-row label { flex: 1; color: #4a5568; }
+
+    .control-row input[type=range] { flex: 2; accent-color: #4299e1; }
+
+    .btn {
+      width: 100%;
+      padding: 0.5rem;
+      border: none;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: filter .15s;
+    }
+    .btn:hover { filter: brightness(0.92); }
+
+    .btn-primary  { background: #4299e1; color: #fff; }
+    .btn-danger   { background: #fc8181; color: #fff; }
+    .btn-success  { background: #68d391; color: #1a202c; }
+    .btn-neutral  { background: #e2e8f0; color: #2d3748; }
+
+    /* ── Instruction chip ────────────────────────────────────────── */
+    .instruction {
+      background: #ebf8ff;
+      border: 1px solid #bee3f8;
+      border-radius: 8px;
+      padding: 0.4rem 0.6rem;
+      font-size: 0.78rem;
+      color: #2c5282;
+      line-height: 1.4;
+      margin-bottom: 0.5rem;
+    }
+
+    /* ── Grid area ───────────────────────────────────────────────── */
+    .grid-wrap {
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 2px 10px rgba(0,0,0,.08);
+      padding: 1rem;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.8rem;
+    }
+
+    #grid {
+      display: grid;
+      border: 2px solid #cbd5e0;
+      border-radius: 4px;
+      touch-action: none;
+      user-select: none;
+    }
+
+    .grid-cell {
+      width: var(--cell-size, 36px);
+      height: var(--cell-size, 36px);
+      border: 1px solid #e2e8f0;
+      transition: background .08s;
+      cursor: crosshair;
+    }
+
+    .grid-cell:hover { opacity: 0.85; }
+
+    .grid-cell.highlight { outline: 2px solid rgba(66,153,225,.7); }
+
+    /* ── Ghost overlay ───────────────────────────────────────────── */
+    #ghost {
+      position: fixed;
+      pointer-events: none;
+      display: none;
+      z-index: 999;
+    }
+
+    #ghost .ghost-grid {
+      display: grid;
+      gap: 1px;
+      opacity: 0.65;
+    }
+
+    #ghost .ghost-cell {
+      border-radius: 2px;
+    }
+
+    /* ── Status bar ──────────────────────────────────────────────── */
+    .status-bar {
+      font-size: 0.78rem;
+      color: #718096;
+      text-align: center;
+    }
+
+    /* ── Responsive ──────────────────────────────────────────────── */
+    @media (max-width: 600px) {
+      .sidebar { width: 100%; }
+      h1 { font-size: 1.4rem; }
+    }
+  </style>
+</head>
+<body>
+
+  <h1>🧩 Polyomino Puzzle Designer</h1>
+  <p class="subtitle">Design colourful tiling puzzles for kids!</p>
+
+  <div class="app">
+
+    <!-- ── Left sidebar ─────────────────────────────── -->
+    <aside class="sidebar">
+
+      <div class="instruction">
+        Select a piece, choose a colour, then click (or drag) on the grid to place it.
+        Right-click a placed piece to erase it.
+      </div>
+
+      <h2>Pieces</h2>
+      <div class="piece-list" id="pieceList"></div>
+
+      <br/>
+      <h2>Colour</h2>
+      <div class="color-swatches" id="colorSwatches"></div>
+
+      <br/>
+      <h2>Grid size</h2>
+      <div class="controls">
+        <div class="control-row">
+          <label>Cols <strong id="colsVal">10</strong></label>
+          <input type="range" id="colsRange" min="4" max="20" value="10" />
+        </div>
+        <div class="control-row">
+          <label>Rows <strong id="rowsVal">10</strong></label>
+          <input type="range" id="rowsRange" min="4" max="20" value="10" />
+        </div>
+        <button class="btn btn-primary" id="applyGrid">Apply</button>
+      </div>
+
+      <br/>
+      <div class="controls">
+        <button class="btn btn-neutral" id="undoBtn">↩ Undo</button>
+        <button class="btn btn-danger"  id="clearBtn">🗑 Clear grid</button>
+        <button class="btn btn-success" id="printBtn">🖨 Print / Save</button>
+      </div>
+
+    </aside>
+
+    <!-- ── Grid ─────────────────────────────────────── -->
+    <div class="grid-wrap">
+      <div id="grid"></div>
+      <div class="status-bar" id="statusBar">Ready — pick a piece and start designing!</div>
+    </div>
+
+  </div>
+
+  <!-- ghost piece that follows the cursor -->
+  <div id="ghost"><div class="ghost-grid" id="ghostGrid"></div></div>
+
+  <script>
+  (() => {
+    /* ── Polyomino definitions (cells as [row, col] offsets) ─────── */
+    const PIECES = [
+      // Monominoes / special
+      { name: 'Single',      shape: [[0,0]] },
+      // Dominoes
+      { name: 'Domino',      shape: [[0,0],[0,1]] },
+      // Trominoes
+      { name: 'L-Tromino',   shape: [[0,0],[1,0],[1,1]] },
+      { name: 'I-Tromino',   shape: [[0,0],[0,1],[0,2]] },
+      // Tetrominoes
+      { name: 'I-Tetromino', shape: [[0,0],[0,1],[0,2],[0,3]] },
+      { name: 'O-Tetromino', shape: [[0,0],[0,1],[1,0],[1,1]] },
+      { name: 'T-Tetromino', shape: [[0,1],[1,0],[1,1],[1,2]] },
+      { name: 'S-Tetromino', shape: [[0,1],[0,2],[1,0],[1,1]] },
+      { name: 'Z-Tetromino', shape: [[0,0],[0,1],[1,1],[1,2]] },
+      { name: 'L-Tetromino', shape: [[0,0],[1,0],[2,0],[2,1]] },
+      { name: 'J-Tetromino', shape: [[0,1],[1,1],[2,0],[2,1]] },
+      // Pentominoes (selection)
+      { name: 'F-Pento',     shape: [[0,1],[0,2],[1,0],[1,1],[2,1]] },
+      { name: 'I-Pento',     shape: [[0,0],[0,1],[0,2],[0,3],[0,4]] },
+      { name: 'L-Pento',     shape: [[0,0],[1,0],[2,0],[3,0],[3,1]] },
+      { name: 'P-Pento',     shape: [[0,0],[0,1],[1,0],[1,1],[2,0]] },
+      { name: 'T-Pento',     shape: [[0,0],[0,1],[0,2],[1,1],[2,1]] },
+      { name: 'U-Pento',     shape: [[0,0],[0,2],[1,0],[1,1],[1,2]] },
+      { name: 'X-Pento',     shape: [[0,1],[1,0],[1,1],[1,2],[2,1]] },
+    ];
+
+    const COLOURS = [
+      '#f687b3','#fc8181','#f6ad55','#faf089',
+      '#68d391','#4fd1c5','#63b3ed','#a78bfa',
+      '#d53f8c','#c53030','#dd6b20','#d69e2e',
+      '#276749','#2c7a7b','#2b6cb0','#553c9a',
+      '#ffffff','#e2e8f0','#a0aec0','#1a202c',
+    ];
+
+    /* ── State ───────────────────────────────────────────────────── */
+    let cols         = 10;
+    let rows         = 10;
+    let cellSize     = 36;
+    let grid         = [];          // [row][col] = colour string or ''
+    let history      = [];          // stack of grid snapshots for undo
+    let activePiece  = PIECES[4];   // default: I-Tetromino
+    let activeColour = COLOURS[6];  // default: blue
+    let rotation     = 0;           // 0-3 (×90°)
+    let painting     = false;       // mouse/touch held down
+    let erasing      = false;
+
+    /* ── DOM refs ────────────────────────────────────────────────── */
+    const gridEl      = document.getElementById('grid');
+    const statusBar   = document.getElementById('statusBar');
+    const ghostEl     = document.getElementById('ghost');
+    const ghostGridEl = document.getElementById('ghostGrid');
+
+    /* ── Helpers ─────────────────────────────────────────────────── */
+    function cloneGrid() { return grid.map(r => [...r]); }
+
+    function saveHistory() { history.push(cloneGrid()); if (history.length > 80) history.shift(); }
+
+    function rotateShape(shape, times) {
+      let s = shape;
+      for (let t = 0; t < times % 4; t++) {
+        // 90° CW: [r,c] → [c, -r]
+        const maxR = Math.max(...s.map(([r]) => r));
+        s = s.map(([r, c]) => [c, maxR - r]);
+      }
+      // normalise to top-left origin
+      const minR = Math.min(...s.map(([r]) => r));
+      const minC = Math.min(...s.map(([,c]) => c));
+      return s.map(([r, c]) => [r - minR, c - minC]);
+    }
+
+    function currentShape() { return rotateShape(activePiece.shape, rotation); }
+
+    function shapeDims(shape) {
+      const maxR = Math.max(...shape.map(([r]) => r));
+      const maxC = Math.max(...shape.map(([,c]) => c));
+      return { rows: maxR + 1, cols: maxC + 1 };
+    }
+
+    /* ── Build grid DOM ──────────────────────────────────────────── */
+    function buildGrid() {
+      // reset state
+      grid    = Array.from({ length: rows }, () => Array(cols).fill(''));
+      history = [];
+
+      gridEl.style.setProperty('--cell-size', cellSize + 'px');
+      gridEl.style.gridTemplateColumns = `repeat(${cols}, ${cellSize}px)`;
+      gridEl.style.gridTemplateRows    = `repeat(${rows}, ${cellSize}px)`;
+      gridEl.innerHTML = '';
+
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          const cell = document.createElement('div');
+          cell.className   = 'grid-cell';
+          cell.dataset.row = r;
+          cell.dataset.col = c;
+          gridEl.appendChild(cell);
+        }
+      }
+    }
+
+    function renderGrid() {
+      const cells = gridEl.querySelectorAll('.grid-cell');
+      cells.forEach(cell => {
+        const r = +cell.dataset.row, c = +cell.dataset.col;
+        cell.style.background = grid[r][c] || '#fff';
+      });
+    }
+
+    /* ── Piece placement ─────────────────────────────────────────── */
+    function placePiece(anchorR, anchorC) {
+      const shape = currentShape();
+      const cells = shape.map(([dr, dc]) => [anchorR + dr, anchorC + dc]);
+      // check bounds
+      if (cells.some(([r, c]) => r < 0 || r >= rows || c < 0 || c >= cols)) return false;
+      saveHistory();
+      cells.forEach(([r, c]) => { grid[r][c] = activeColour; });
+      renderGrid();
+      return true;
+    }
+
+    function eraseCell(r, c) {
+      if (r < 0 || r >= rows || c < 0 || c >= cols) return;
+      if (!grid[r][c]) return;
+      saveHistory();
+      grid[r][c] = '';
+      renderGrid();
+    }
+
+    /* ── Ghost piece ─────────────────────────────────────────────── */
+    function showGhost(x, y, anchorR, anchorC) {
+      const shape = currentShape();
+      const dim   = shapeDims(shape);
+      ghostGridEl.style.gridTemplateColumns = `repeat(${dim.cols}, ${cellSize}px)`;
+      ghostGridEl.style.gridTemplateRows    = `repeat(${dim.rows}, ${cellSize}px)`;
+      ghostGridEl.innerHTML = '';
+
+      for (let r = 0; r < dim.rows; r++) {
+        for (let c = 0; c < dim.cols; c++) {
+          const div = document.createElement('div');
+          div.className = 'ghost-cell';
+          div.style.width  = cellSize + 'px';
+          div.style.height = cellSize + 'px';
+          const has = shape.some(([sr, sc]) => sr === r && sc === c);
+          const gr  = anchorR + r, gc = anchorC + c;
+          const fits = gr >= 0 && gr < rows && gc >= 0 && gc < cols;
+          div.style.background = (has && fits) ? activeColour : 'transparent';
+          if (has && !fits) div.style.background = '#fc8181';
+          ghostGridEl.appendChild(div);
+        }
+      }
+
+      ghostEl.style.display = 'block';
+      ghostEl.style.left    = x + 'px';
+      ghostEl.style.top     = y + 'px';
+    }
+
+    function hideGhost() { ghostEl.style.display = 'none'; }
+
+    /* ── Cell from event ─────────────────────────────────────────── */
+    function cellFromEvent(e) {
+      const target = document.elementFromPoint(e.clientX, e.clientY);
+      if (!target || !target.classList.contains('grid-cell')) return null;
+      return { r: +target.dataset.row, c: +target.dataset.col, el: target };
+    }
+
+    function anchorFromEvent(e) {
+      const info = cellFromEvent(e);
+      if (!info) return null;
+      // anchor is the top-left of the bounding box such that cursor is roughly centred
+      const shape = currentShape();
+      const dim   = shapeDims(shape);
+      const anchorR = info.r - Math.floor(dim.rows / 2);
+      const anchorC = info.c - Math.floor(dim.cols  / 2);
+      return { anchorR, anchorC };
+    }
+
+    /* ── Grid events ─────────────────────────────────────────────── */
+    gridEl.addEventListener('mousemove', e => {
+      const a = anchorFromEvent(e);
+      if (!a) { hideGhost(); return; }
+      if (!erasing) showGhost(e.clientX, e.clientY, a.anchorR, a.anchorC);
+      if (painting) {
+        if (erasing) {
+          const info = cellFromEvent(e);
+          if (info) eraseCell(info.r, info.c);
+        } else {
+          placePiece(a.anchorR, a.anchorC);
+        }
+      }
+    });
+
+    gridEl.addEventListener('mousedown', e => {
+      e.preventDefault();
+      painting = true;
+      if (e.button === 2) {
+        erasing = true;
+        const info = cellFromEvent(e);
+        if (info) eraseCell(info.r, info.c);
+      } else {
+        erasing = false;
+        const a = anchorFromEvent(e);
+        if (a) placePiece(a.anchorR, a.anchorC);
+      }
+    });
+
+    window.addEventListener('mouseup', () => { painting = false; erasing = false; });
+
+    gridEl.addEventListener('mouseleave', hideGhost);
+
+    gridEl.addEventListener('contextmenu', e => e.preventDefault());
+
+    /* ── Touch support ───────────────────────────────────────────── */
+    gridEl.addEventListener('touchstart', e => {
+      e.preventDefault();
+      painting = true;
+      const t = e.touches[0];
+      const a = anchorFromEvent(t);
+      if (a) placePiece(a.anchorR, a.anchorC);
+    }, { passive: false });
+
+    gridEl.addEventListener('touchmove', e => {
+      e.preventDefault();
+      const t = e.touches[0];
+      const a = anchorFromEvent(t);
+      if (a) placePiece(a.anchorR, a.anchorC);
+    }, { passive: false });
+
+    window.addEventListener('touchend', () => { painting = false; });
+
+    /* ── Keyboard: R to rotate ───────────────────────────────────── */
+    window.addEventListener('keydown', e => {
+      if (e.key === 'r' || e.key === 'R') {
+        rotation = (rotation + 1) % 4;
+        setStatus(`Rotated ${activePiece.name} (${rotation * 90}°)`);
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z') { undo(); }
+    });
+
+    /* ── Piece palette ───────────────────────────────────────────── */
+    function buildPieceList() {
+      const list = document.getElementById('pieceList');
+      list.innerHTML = '';
+      PIECES.forEach((piece, idx) => {
+        const btn = document.createElement('button');
+        btn.className = 'piece-btn' + (piece === activePiece ? ' active' : '');
+        btn.dataset.idx = idx;
+
+        // mini preview
+        const preview = document.createElement('div');
+        preview.className = 'piece-preview';
+        const dim = shapeDims(piece.shape);
+        preview.style.gridTemplateColumns = `repeat(${dim.cols}, 8px)`;
+        preview.style.gridTemplateRows    = `repeat(${dim.rows}, 8px)`;
+        for (let r = 0; r < dim.rows; r++) {
+          for (let c = 0; c < dim.cols; c++) {
+            const d = document.createElement('div');
+            d.className = 'cell';
+            const has = piece.shape.some(([sr, sc]) => sr === r && sc === c);
+            d.style.background = has ? activeColour : 'transparent';
+            preview.appendChild(d);
+          }
+        }
+
+        btn.appendChild(preview);
+        btn.appendChild(document.createTextNode(piece.name));
+
+        btn.addEventListener('click', () => {
+          activePiece = piece;
+          rotation    = 0;
+          document.querySelectorAll('.piece-btn').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          setStatus(`Selected ${piece.name}  ·  Press R to rotate`);
+          buildPieceList(); // refresh mini previews with new colour
+        });
+
+        list.appendChild(btn);
+      });
+    }
+
+    /* ── Colour swatches ─────────────────────────────────────────── */
+    function buildSwatches() {
+      const container = document.getElementById('colorSwatches');
+      container.innerHTML = '';
+      COLOURS.forEach(col => {
+        const s = document.createElement('div');
+        s.className  = 'swatch' + (col === activeColour ? ' active' : '');
+        s.style.background = col;
+        if (col === '#ffffff') s.style.border = '3px solid #e2e8f0';
+        s.title = col;
+        s.addEventListener('click', () => {
+          activeColour = col;
+          document.querySelectorAll('.swatch').forEach(sw => sw.classList.remove('active'));
+          s.classList.add('active');
+          buildPieceList(); // refresh mini previews
+          setStatus(`Colour set to ${col}`);
+        });
+        container.appendChild(s);
+      });
+    }
+
+    /* ── Grid size controls ──────────────────────────────────────── */
+    const colsRange = document.getElementById('colsRange');
+    const rowsRange = document.getElementById('rowsRange');
+    const colsVal   = document.getElementById('colsVal');
+    const rowsVal   = document.getElementById('rowsVal');
+
+    colsRange.addEventListener('input', () => { colsVal.textContent = colsRange.value; });
+    rowsRange.addEventListener('input', () => { rowsVal.textContent = rowsRange.value; });
+
+    document.getElementById('applyGrid').addEventListener('click', () => {
+      cols = +colsRange.value;
+      rows = +rowsRange.value;
+      // adjust cell size so the grid doesn't overflow typical screens
+      const maxPx = Math.min(window.innerWidth - 260, 600);
+      cellSize = Math.max(18, Math.min(42, Math.floor(maxPx / Math.max(cols, rows))));
+      buildGrid();
+      renderGrid();
+      setStatus(`Grid resized to ${cols}×${rows}`);
+    });
+
+    /* ── Undo / Clear / Print ────────────────────────────────────── */
+    function undo() {
+      if (!history.length) return;
+      grid = history.pop();
+      renderGrid();
+      setStatus('Undo!');
+    }
+
+    document.getElementById('undoBtn').addEventListener('click', undo);
+
+    document.getElementById('clearBtn').addEventListener('click', () => {
+      saveHistory();
+      grid = Array.from({ length: rows }, () => Array(cols).fill(''));
+      renderGrid();
+      setStatus('Grid cleared.');
+    });
+
+    document.getElementById('printBtn').addEventListener('click', () => {
+      window.print();
+    });
+
+    /* ── Status helper ───────────────────────────────────────────── */
+    function setStatus(msg) { statusBar.textContent = msg; }
+
+    /* ── Init ────────────────────────────────────────────────────── */
+    buildSwatches();
+    buildPieceList();
+    buildGrid();
+    renderGrid();
+    setStatus('Ready — select a piece, pick a colour, and start designing!');
+
+  })();
+  </script>
+</body>
+</html>
