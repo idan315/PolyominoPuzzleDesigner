@@ -1,0 +1,691 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Polyomino Puzzle Designer</title>
+<style>
+    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f4f4f9; margin: 0; padding: 20px; color: #333; }
+    h1 { text-align: center; }
+    .container { display: flex; gap: 30px; max-width: 1200px; margin: 0 auto; align-items: flex-start; }
+    
+    .panel { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+    .controls-panel { flex: 1; min-width: 300px; }
+    .board-panel { flex: 2; display: flex; flex-direction: column; align-items: center; overflow-x: auto; }
+    
+    h2 { margin-top: 0; font-size: 1.1rem; border-bottom: 2px solid #eee; padding-bottom: 8px; margin-bottom: 12px;}
+    
+    .inventory-item { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; padding: 5px; background: #fafafa; border: 1px solid #ddd; border-radius: 4px;}
+    .inventory-item span { font-weight: bold; font-size: 0.9rem; }
+    .color-box { display: inline-block; width: 16px; height: 16px; border: 1px solid rgba(0,0,0,0.2); margin-right: 8px; vertical-align: middle; }
+    .qty-controls button { width: 28px; height: 28px; font-weight: bold; cursor: pointer; border: 1px solid #ccc; background: white; border-radius: 4px; }
+    .qty-controls button:hover { background: #eee; }
+    
+    .tools { display: flex; gap: 10px; margin-bottom: 20px; }
+    .tools button { flex: 1; padding: 8px; cursor: pointer; border: 1px solid #ccc; background: white; border-radius: 4px; font-weight: bold; }
+    .tools button.active { background: #333; color: white; border-color: #333; }
+    
+    .action-btn { padding: 6px 12px; cursor: pointer; background: #e2e8f0; border: 1px solid #cbd5e1; border-radius: 4px; font-weight: bold; }
+    .action-btn:hover:not(:disabled) { background: #cbd5e1; }
+    .action-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .boards-wrapper { display: flex; gap: 40px; justify-content: center; width: 100%; margin-top: 10px; }
+    .board-container { display: flex; flex-direction: column; align-items: center; }
+    
+    .grid { display: grid; gap: 2px; background: #ccc; border: 2px solid #999; padding: 2px; margin-bottom: 15px;}
+    .cell { width: 40px; height: 40px; background: white; display: flex; justify-content: center; align-items: center; cursor: pointer; user-select: none; }
+    .cell.inactive { background: #222; cursor: not-allowed; border: 1px solid #111; }
+    .cell.hinted { border: 3px dashed #000; box-sizing: border-box; }
+    
+    #status-banner { margin-top: 20px; padding: 15px; border-radius: 4px; font-weight: bold; text-align: center; width: 100%; box-sizing: border-box; font-size: 1.1rem; transition: opacity 0.2s; }
+    .status-calculating { background: #fff3cd; color: #856404; }
+    .status-single { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+    .status-multiple { background: #cce5ff; color: #004085; border: 1px solid #b8daff; }
+    .status-none { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+    .status-error { background: #e2e3e5; color: #383d41; }
+    
+    .banner-clickable { cursor: pointer; text-decoration: underline; }
+    .banner-clickable:hover { opacity: 0.8; }
+
+    .btn-export { padding: 8px 15px; cursor: pointer; background: #2563EB; color: white; border: none; border-radius: 4px; font-weight: bold; font-size: 0.9rem; }
+    .btn-export:hover { background: #1D4ED8; }
+
+    #all-solutions-container { display: none; flex-direction: column; align-items: center; width: 100%; margin-top: 20px; padding: 20px; box-sizing: border-box; background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 8px; }
+    #all-solutions-grid-wrapper { display: flex; flex-wrap: wrap; gap: 20px; justify-content: center; width: 100%; }
+    .mini-grid { display: grid; gap: 1px; background: #ccc; border: 1px solid #999; padding: 1px; margin-top: 5px; }
+    .mini-cell { width: 18px; height: 18px; background: white; box-sizing: border-box; }
+</style>
+</head>
+<body>
+
+<h1>Polyomino Puzzle Designer</h1>
+
+<div class="container">
+    <div class="panel controls-panel">
+        
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; border-bottom: 2px solid #eee; padding-bottom: 8px;">
+            <h2 style="margin: 0; border: none; padding: 0;">1. Grid Size</h2>
+            <div style="display: flex; gap: 5px;">
+                <button id="btn-undo" class="action-btn" disabled>⟲ Undo</button>
+                <button id="btn-redo" class="action-btn" disabled>⟳ Redo</button>
+            </div>
+        </div>
+        
+        <div style="display: flex; gap: 10px; margin-bottom: 20px; align-items: center;">
+            <label>Width: <input type="number" id="input-cols" value="8" min="3" max="15" style="width: 50px; padding: 4px;"></label>
+            <label>Height: <input type="number" id="input-rows" value="5" min="3" max="15" style="width: 50px; padding: 4px;"></label>
+            <button id="btn-resize" class="action-btn">Resize</button>
+        </div>
+
+        <h2>2. Select Tool</h2>
+        <div class="tools">
+            <button id="tool-toggle" class="active" data-tool="toggle">Shape Board</button>
+            <button id="tool-hint" data-tool="hint">Place Hints</button>
+            <button id="tool-erase" data-tool="erase">Erase Hints</button>
+        </div>
+
+        <h2>3. Select Hint Color</h2>
+        <select id="hint-selector" style="width: 100%; padding: 8px; margin-bottom: 20px;" disabled>
+            </select>
+
+        <h2>4. Piece Inventory</h2>
+        <div id="inventory-list"></div>
+        <p style="text-align: right; font-size: 0.9em; color: #666;">
+            Active Squares: <span id="count-active">40</span> | Piece Area: <span id="count-area">40</span>
+        </p>
+    </div>
+
+    <div class="panel board-panel">
+        <div class="boards-wrapper">
+            <div class="board-container">
+                <h3>Design Puzzle</h3>
+                <div id="design-grid" class="grid"></div>
+                <button class="btn-export" id="btn-export-design">⬇ Export Puzzle (PNG)</button>
+            </div>
+            <div class="board-container">
+                <h3>Solution Display</h3>
+                <div id="solution-grid" class="grid"></div>
+                <button class="btn-export" id="btn-export-solution">⬇ Export Solution (PNG)</button>
+            </div>
+        </div>
+        <div id="status-banner" class="status-calculating">Waiting for changes...</div>
+        
+        <div id="all-solutions-container">
+            <h3 style="margin-top: 0;">Alternative Solutions</h3>
+            <div id="all-solutions-grid-wrapper"></div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+
+    const PIECE_DEFS = {
+        'DarkBlue': { name: 'Dark Blue (3x1)', color: '#1E3A8A', text: 'white', baseCoords: [[0,0],[0,1],[0,2]] },
+        'Green': { name: 'Green (2x1)', color: '#22C55E', text: 'black', baseCoords: [[0,0],[0,1]] },
+        'Purple': { name: 'Purple (4x1)', color: 'rgb(170, 90, 220)', text: 'white', baseCoords: [[0,0],[0,1],[0,2],[0,3]] },
+        'LightBlue': { name: 'Light Blue (L-tetromino)', color: '#60A5FA', text: 'black', baseCoords: [[0,0],[1,0],[2,0],[2,1]] },
+        'Red': { name: 'Red (Square)', color: '#EF4444', text: 'white', baseCoords: [[0,0],[0,1],[1,0],[1,1]] },
+        'LightYellow': { name: 'Light Yellow (1x1)', color: '#FEF08A', text: 'black', baseCoords: [[0,0]] },
+        'Yellow': { name: 'Yellow (L-tromino)', color: '#EAB308', text: 'black', baseCoords: [[0,0],[1,0],[1,1]] },
+        'Orange': { name: 'Orange (Z)', color: '#F97316', text: 'white', baseCoords: [[0,0],[0,1],[1,1],[1,2]] },
+        'Pink': { name: 'Pink (T)', color: '#F472B6', text: 'black', baseCoords: [[0,0],[0,1],[0,2],[1,1]] }
+    };
+
+    let gridRows = 5;
+    let gridCols = 8;
+    let designGrid = []; 
+    let currentTool = 'toggle';
+    let inventory = { 'DarkBlue':1, 'Green':1, 'Purple':1, 'LightBlue':1, 'Red':1, 'LightYellow':1, 'Yellow':2, 'Orange':1, 'Pink':1 };
+    let solveTimeout = null;
+    let currentSolutionMatrix = null;
+    let allSolutionsData = [];
+
+    // History System
+    let history = [];
+    let historyIndex = -1;
+
+    function init() {
+        document.getElementById('btn-resize').addEventListener('click', () => {
+            updateGridSize();
+            saveState();
+        });
+        document.getElementById('btn-undo').addEventListener('click', undo);
+        document.getElementById('btn-redo').addEventListener('click', redo);
+        
+        document.getElementById('btn-export-design').addEventListener('click', () => exportGridToPNG('design'));
+        document.getElementById('btn-export-solution').addEventListener('click', () => exportGridToPNG('solution'));
+
+        document.querySelectorAll('.tools button').forEach(btn => {
+            btn.addEventListener('click', (e) => setTool(e.target.getAttribute('data-tool')));
+        });
+
+        document.getElementById('status-banner').addEventListener('click', () => {
+            if (allSolutionsData.length > 1 && allSolutionsData.length < 10) {
+                const container = document.getElementById('all-solutions-container');
+                container.style.display = (container.style.display === 'flex') ? 'none' : 'flex';
+                if (container.style.display === 'flex') renderGallery();
+            }
+        });
+
+        for (let r = 0; r < gridRows; r++) {
+            designGrid[r] = [];
+            for (let c = 0; c < gridCols; c++) {
+                designGrid[r][c] = { active: true, hint: null };
+            }
+        }
+        
+        buildHintSelector();
+        buildInventoryUI();
+        renderDesignGrid();
+        renderSolutionGrid(null);
+        
+        for (let key in PIECE_DEFS) {
+            PIECE_DEFS[key].orientations = getUniqueOrientations(PIECE_DEFS[key].baseCoords);
+        }
+
+        saveState(); 
+        triggerSolver();
+    }
+
+    // --- HISTORY SYSTEM ---
+    function saveState() {
+        if (historyIndex < history.length - 1) {
+            history = history.slice(0, historyIndex + 1); 
+        }
+        
+        history.push({
+            rows: gridRows,
+            cols: gridCols,
+            grid: JSON.parse(JSON.stringify(designGrid)),
+            inv: JSON.parse(JSON.stringify(inventory))
+        });
+        historyIndex++;
+        updateUndoRedoButtons();
+    }
+
+    function updateUndoRedoButtons() {
+        document.getElementById('btn-undo').disabled = historyIndex <= 0;
+        document.getElementById('btn-redo').disabled = historyIndex >= history.length - 1;
+    }
+
+    function undo() {
+        if (historyIndex > 0) {
+            historyIndex--;
+            restoreState(history[historyIndex]);
+        }
+    }
+
+    function redo() {
+        if (historyIndex < history.length - 1) {
+            historyIndex++;
+            restoreState(history[historyIndex]);
+        }
+    }
+
+    function restoreState(state) {
+        gridRows = state.rows;
+        gridCols = state.cols;
+        designGrid = JSON.parse(JSON.stringify(state.grid));
+        inventory = JSON.parse(JSON.stringify(state.inv));
+        
+        document.getElementById('input-cols').value = gridCols;
+        document.getElementById('input-rows').value = gridRows;
+        
+        buildInventoryUI(); 
+        updateAreaCounts();
+        renderDesignGrid();
+        renderSolutionGrid(null);
+        updateUndoRedoButtons();
+        triggerSolver();
+    }
+
+    function updateGridSize() {
+        let newCols = parseInt(document.getElementById('input-cols').value);
+        let newRows = parseInt(document.getElementById('input-rows').value);
+        
+        if (newCols > 15) newCols = 15;
+        if (newRows > 15) newRows = 15;
+        if (newCols < 1) newCols = 1;
+        if (newRows < 1) newRows = 1;
+        
+        document.getElementById('input-cols').value = newCols;
+        document.getElementById('input-rows').value = newRows;
+
+        let newGrid = [];
+        for (let r = 0; r < newRows; r++) {
+            newGrid[r] = [];
+            for (let c = 0; c < newCols; c++) {
+                if (r < gridRows && c < gridCols) {
+                    newGrid[r][c] = designGrid[r][c]; 
+                } else {
+                    newGrid[r][c] = { active: true, hint: null }; 
+                }
+            }
+        }
+        
+        gridRows = newRows;
+        gridCols = newCols;
+        designGrid = newGrid;
+        
+        updateAreaCounts();
+        renderDesignGrid();
+        renderSolutionGrid(null);
+    }
+
+    function buildInventoryUI() {
+        const container = document.getElementById('inventory-list');
+        container.innerHTML = '';
+        for (let key in PIECE_DEFS) {
+            let p = PIECE_DEFS[key];
+            container.innerHTML += `
+                <div class="inventory-item">
+                    <div>
+                        <span class="color-box" style="background:${p.color}"></span>
+                        <span>${p.name}</span>
+                    </div>
+                    <div class="qty-controls">
+                        <button class="btn-qty" data-action="-1" data-key="${key}">-</button>
+                        <span style="display:inline-block; width:20px; text-align:center;">${inventory[key]}</span>
+                        <button class="btn-qty" data-action="1" data-key="${key}">+</button>
+                    </div>
+                </div>
+            `;
+        }
+        
+        document.querySelectorAll('.btn-qty').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                let action = parseInt(e.target.getAttribute('data-action'));
+                let key = e.target.getAttribute('data-key');
+                updateQty(key, action);
+                saveState();
+            });
+        });
+
+        updateAreaCounts();
+    }
+
+    function buildHintSelector() {
+        const sel = document.getElementById('hint-selector');
+        sel.innerHTML = '';
+        for (let key in PIECE_DEFS) {
+            sel.innerHTML += `<option value="${key}">${PIECE_DEFS[key].name}</option>`;
+        }
+    }
+
+    function setTool(tool) {
+        currentTool = tool;
+        document.querySelectorAll('.tools button').forEach(b => b.classList.remove('active'));
+        document.getElementById('tool-' + tool).classList.add('active');
+        document.getElementById('hint-selector').disabled = (tool !== 'hint');
+    }
+
+    function updateQty(key, delta) {
+        inventory[key] = Math.max(0, inventory[key] + delta);
+        buildInventoryUI();
+        triggerSolver();
+    }
+
+    function handleCellClick(r, c) {
+        let cell = designGrid[r][c];
+        let changed = false;
+
+        if (currentTool === 'toggle') {
+            cell.active = !cell.active;
+            if (!cell.active) cell.hint = null;
+            changed = true;
+        } else if (currentTool === 'hint' && cell.active) {
+            let newHint = document.getElementById('hint-selector').value;
+            if (cell.hint !== newHint) {
+                cell.hint = newHint;
+                changed = true;
+            }
+        } else if (currentTool === 'erase' && cell.active) {
+            if (cell.hint !== null) {
+                cell.hint = null;
+                changed = true;
+            }
+        }
+
+        if (changed) {
+            updateAreaCounts();
+            renderDesignGrid();
+            saveState();
+            triggerSolver();
+        }
+    }
+
+    function updateAreaCounts() {
+        let activeCells = 0;
+        for (let r=0; r<gridRows; r++) {
+            for (let c=0; c<gridCols; c++) {
+                if (designGrid[r][c].active) activeCells++;
+            }
+        }
+        let area = 0;
+        for (let key in inventory) {
+            area += inventory[key] * PIECE_DEFS[key].baseCoords.length;
+        }
+        document.getElementById('count-active').innerText = activeCells;
+        document.getElementById('count-area').innerText = area;
+    }
+
+    function renderDesignGrid() {
+        const container = document.getElementById('design-grid');
+        container.style.gridTemplateColumns = `repeat(${gridCols}, 40px)`;
+        container.innerHTML = '';
+        
+        for (let r=0; r<gridRows; r++) {
+            for (let c=0; c<gridCols; c++) {
+                let cellData = designGrid[r][c];
+                let div = document.createElement('div');
+                div.className = 'cell';
+                if (!cellData.active) div.classList.add('inactive');
+                
+                if (cellData.hint) {
+                    div.classList.add('hinted');
+                    div.style.backgroundColor = PIECE_DEFS[cellData.hint].color;
+                }
+                
+                div.addEventListener('click', () => handleCellClick(r, c));
+                container.appendChild(div);
+            }
+        }
+    }
+
+    function renderSolutionGrid(solutionMatrix) {
+        currentSolutionMatrix = solutionMatrix;
+        const container = document.getElementById('solution-grid');
+        container.style.gridTemplateColumns = `repeat(${gridCols}, 40px)`;
+        container.innerHTML = '';
+        
+        for (let r=0; r<gridRows; r++) {
+            for (let c=0; c<gridCols; c++) {
+                let div = document.createElement('div');
+                div.className = 'cell';
+                
+                if (!designGrid[r][c].active) {
+                    div.classList.add('inactive');
+                } else if (solutionMatrix && solutionMatrix[r][c]) {
+                    let key = solutionMatrix[r][c];
+                    div.style.backgroundColor = PIECE_DEFS[key].color;
+                    div.style.border = '1px solid rgba(0,0,0,0.5)';
+                }
+                container.appendChild(div);
+            }
+        }
+    }
+
+    function renderGallery() {
+        const wrapper = document.getElementById('all-solutions-grid-wrapper');
+        const container = document.getElementById('all-solutions-container');
+        wrapper.innerHTML = '';
+        container.style.display = 'flex';
+
+        allSolutionsData.forEach((sol, idx) => {
+            let solBlock = document.createElement('div');
+            solBlock.innerHTML = `<div style="text-align:center; font-size:13px; font-weight:bold;">Option ${idx + 1}</div>`;
+            
+            let gridDiv = document.createElement('div');
+            gridDiv.className = 'mini-grid';
+            gridDiv.style.gridTemplateColumns = `repeat(${gridCols}, 18px)`;
+
+            for (let r=0; r<gridRows; r++) {
+                for (let c=0; c<gridCols; c++) {
+                    let cell = document.createElement('div');
+                    cell.className = 'mini-cell';
+                    if (!designGrid[r][c].active) {
+                        cell.style.backgroundColor = '#222';
+                    } else if (sol[r][c]) {
+                        cell.style.backgroundColor = PIECE_DEFS[sol[r][c]].color;
+                        cell.style.border = '1px solid rgba(0,0,0,0.3)';
+                    }
+                    gridDiv.appendChild(cell);
+                }
+            }
+            solBlock.appendChild(gridDiv);
+            wrapper.appendChild(solBlock);
+        });
+    }
+
+    function setStatus(type, msg, isClickable = false) {
+        const banner = document.getElementById('status-banner');
+        banner.className = `status-${type}`;
+        
+        if (isClickable) {
+            banner.classList.add('banner-clickable');
+            banner.innerText = msg + ' (Click here to view all)';
+        } else {
+            banner.classList.remove('banner-clickable');
+            banner.innerText = msg;
+        }
+    }
+
+    function exportGridToPNG(gridType) {
+        if (gridType === 'solution' && !currentSolutionMatrix) {
+            alert("There is no completed solution to export right now.");
+            return;
+        }
+
+        const cellSize = 40;
+        const gap = 2; 
+        const canvas = document.createElement('canvas');
+        canvas.width = gridCols * (cellSize + gap) + gap;
+        canvas.height = gridRows * (cellSize + gap) + gap;
+        const ctx = canvas.getContext('2d');
+
+        ctx.fillStyle = '#999';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        for (let r = 0; r < gridRows; r++) {
+            for (let c = 0; c < gridCols; c++) {
+                const x = gap + c * (cellSize + gap);
+                const y = gap + r * (cellSize + gap);
+                let cellData = designGrid[r][c];
+
+                if (gridType === 'design') {
+                    if (!cellData.active) {
+                        ctx.fillStyle = '#222';
+                    } else if (cellData.hint) {
+                        ctx.fillStyle = PIECE_DEFS[cellData.hint].color;
+                    } else {
+                        ctx.fillStyle = '#fff';
+                    }
+                    ctx.fillRect(x, y, cellSize, cellSize);
+
+                    if (cellData.active && cellData.hint) {
+                        ctx.setLineDash([5, 5]);
+                        ctx.strokeStyle = '#000';
+                        ctx.lineWidth = 3;
+                        ctx.strokeRect(x + 1.5, y + 1.5, cellSize - 3, cellSize - 3);
+                        ctx.setLineDash([]); 
+                    }
+                } else if (gridType === 'solution') {
+                    if (!cellData.active) {
+                        ctx.fillStyle = '#222';
+                    } else if (currentSolutionMatrix[r][c]) {
+                        ctx.fillStyle = PIECE_DEFS[currentSolutionMatrix[r][c]].color;
+                    } else {
+                        ctx.fillStyle = '#fff';
+                    }
+                    ctx.fillRect(x, y, cellSize, cellSize);
+
+                    if (cellData.active && currentSolutionMatrix[r][c]) {
+                        ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+                        ctx.lineWidth = 1;
+                        ctx.strokeRect(x, y, cellSize, cellSize);
+                    }
+                }
+            }
+        }
+
+        const link = document.createElement('a');
+        link.download = `polyomino-${gridType}.png`;
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+    }
+
+    function getUniqueOrientations(coords) {
+        let seen = new Set();
+        let unique = [];
+        let current = coords;
+        for (let ref = 0; ref < 2; ref++) {
+            for (let rot = 0; rot < 4; rot++) {
+                let norm = normalizeCoords(current);
+                let hash = JSON.stringify(norm);
+                if (!seen.has(hash)) {
+                    seen.add(hash);
+                    unique.push(norm);
+                }
+                current = rotateCoords(current);
+            }
+            current = reflectCoords(coords);
+        }
+        return unique;
+    }
+
+    function rotateCoords(coords) { return coords.map(([r, c]) => [c, -r]); }
+    function reflectCoords(coords) { return coords.map(([r, c]) => [r, -c]); }
+    
+    function normalizeCoords(coords) {
+        let minR = Math.min(...coords.map(c => c[0]));
+        let minC = Math.min(...coords.map(c => c[1]));
+        let norm = coords.map(([r, c]) => [r - minR, c - minC]);
+        norm.sort((a, b) => (a[0] === b[0] ? a[1] - b[1] : a[0] - b[0]));
+        let anchorR = norm[0][0];
+        let anchorC = norm[0][1];
+        return norm.map(([r, c]) => [r - anchorR, c - anchorC]);
+    }
+
+    function triggerSolver() {
+        setStatus('calculating', 'Calculating solutions...');
+        document.getElementById('all-solutions-container').style.display = 'none'; 
+        allSolutionsData = [];
+        clearTimeout(solveTimeout);
+        solveTimeout = setTimeout(runSolver, 50);
+    }
+
+    function runSolver() {
+        let activeCount = parseInt(document.getElementById('count-active').innerText);
+        let areaCount = parseInt(document.getElementById('count-area').innerText);
+        
+        if (activeCount !== areaCount) {
+            setStatus('error', `Area Mismatch! Board space (${activeCount}) does not equal Piece Area (${areaCount}).`);
+            renderSolutionGrid(null);
+            return;
+        }
+
+        let piecesToPlace = [];
+        for (let key in inventory) {
+            for (let i=0; i<inventory[key]; i++) {
+                piecesToPlace.push(key);
+            }
+        }
+
+        let workGrid = [];
+        for (let r=0; r<gridRows; r++) {
+            workGrid[r] = [];
+            for (let c=0; c<gridCols; c++) {
+                workGrid[r][c] = designGrid[r][c].active ? null : 'BLOCKED';
+            }
+        }
+
+        let solutionsFound = [];
+        let solutionHashes = new Set();
+        let iterations = 0;
+        const MAX_ITERATIONS = 400000;
+        const SOLUTION_LIMIT = 50;
+
+        function solveRecursive(pieceList) {
+            iterations++;
+            if (iterations > MAX_ITERATIONS) return;
+            if (solutionsFound.length >= SOLUTION_LIMIT) return;
+
+            let r = -1, c = -1;
+            outer: for (let i=0; i<gridRows; i++) {
+                for (let j=0; j<gridCols; j++) {
+                    if (workGrid[i][j] === null) {
+                        r = i; c = j;
+                        break outer;
+                    }
+                }
+            }
+
+            if (r === -1) {
+                let boardHash = JSON.stringify(workGrid);
+                if (!solutionHashes.has(boardHash)) {
+                    solutionHashes.add(boardHash);
+                    solutionsFound.push(JSON.parse(boardHash));
+                }
+                return;
+            }
+
+            let triedTypes = new Set();
+            for (let i = 0; i < pieceList.length; i++) {
+                let pKey = pieceList[i];
+                if (triedTypes.has(pKey)) continue; 
+                triedTypes.add(pKey);
+
+                let orientations = PIECE_DEFS[pKey].orientations;
+                
+                for (let o of orientations) {
+                    if (canPlace(workGrid, r, c, pKey, o)) {
+                        for (let [dr, dc] of o) workGrid[r + dr][c + dc] = pKey;
+                        
+                        let nextList = [...pieceList];
+                        nextList.splice(i, 1);
+                        solveRecursive(nextList);
+                        
+                        for (let [dr, dc] of o) workGrid[r + dr][c + dc] = null;
+                        
+                        if (solutionsFound.length >= SOLUTION_LIMIT || iterations > MAX_ITERATIONS) return;
+                    }
+                }
+            }
+        }
+
+        function canPlace(board, r, c, pKey, orientation) {
+            for (let [dr, dc] of orientation) {
+                let nr = r + dr;
+                let nc = c + dc;
+                if (nr < 0 || nr >= gridRows || nc < 0 || nc >= gridCols || board[nr][nc] !== null) {
+                    return false;
+                }
+                let cellHint = designGrid[nr][nc].hint;
+                if (cellHint && cellHint !== pKey) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        solveRecursive(piecesToPlace);
+        allSolutionsData = solutionsFound; 
+
+        if (iterations > MAX_ITERATIONS) {
+            setStatus('error', `Puzzle is too complex. Solver aborted to prevent browser freeze. Found ${solutionsFound.length} partial solutions.`);
+            renderSolutionGrid(solutionsFound.length > 0 ? solutionsFound[0] : null);
+        } else if (solutionsFound.length === 0) {
+            setStatus('none', 'No valid solutions exist for this configuration.');
+            renderSolutionGrid(null);
+        } else if (solutionsFound.length === 1) {
+            setStatus('single', 'Success! Exactly 1 Unique Solution found.');
+            renderSolutionGrid(solutionsFound[0]);
+        } else if (solutionsFound.length > 1 && solutionsFound.length < 10) {
+            setStatus('multiple', `Found exactly ${solutionsFound.length} distinct solutions.`, true); 
+            renderSolutionGrid(solutionsFound[0]);
+        } else if (solutionsFound.length < SOLUTION_LIMIT) {
+            setStatus('multiple', `Found exactly ${solutionsFound.length} distinct solutions. Add more hints to lock it down.`);
+            renderSolutionGrid(solutionsFound[0]);
+        } else {
+            setStatus('multiple', `50+ solutions possible. Stopped calculating early. Add more hints.`);
+            renderSolutionGrid(solutionsFound[0]);
+        }
+    }
+
+    init();
+
+});
+</script>
+</body>
+</html>
